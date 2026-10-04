@@ -1,0 +1,9 @@
+{
+  "num_selected": 32,
+  "num_candidates": 128,
+  "relevance_weight": 1.0,
+  "diversity_weight": 0.0,
+  "coverage_weight": 0.0,
+  "epsilon": 1e-08
+}
+

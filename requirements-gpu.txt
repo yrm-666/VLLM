@@ -1,0 +1,11 @@
+# Install the CUDA-matched torch + torchvision pair first from pytorch.org.
+# These are the remaining runtime packages for the initial HF experiments.
+setuptools>=68
+wheel
+transformers==4.57.1
+accelerate
+numpy
+Pillow
+einops
+decord2
+molmo_utils
