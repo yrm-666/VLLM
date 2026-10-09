@@ -29,12 +29,16 @@ conda activate efficient-molmo2
 cd ~/projects/VLLM
 git status --short
 git pull --ff-only
-python -m pip install --no-deps -e .
+python -m pip install --no-index --no-deps --no-build-isolation -e .
 python -m unittest discover -s tests -q
 ```
 
 若远程有未提交改动或 pull 失败，先保存改动并处理；不要用 reset --hard。
 当前环境依赖已装好，无需升级系统、驱动或重建 Conda 环境。
+
+SigLIP2 的 AutoProcessor 不统一强制 `use_fast=False`，以免连 tokenizer 也切换成
+需要 SentencePiece 的 GemmaTokenizer；沿用 V1 已跑通的默认加载路径。
+图像处理器的慢速提示本身不代表错误。缓存指纹记录实际图像处理器和 tokenizer 类。
 
 ## 2. 先用原 20 题回归，三个模式同预算
 

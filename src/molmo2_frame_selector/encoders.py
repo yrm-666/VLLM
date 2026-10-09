@@ -90,7 +90,10 @@ class Siglip2Encoder:
             model_id,
             local_files_only=local_files_only,
             revision=revision,
-            use_fast=False,
+            # Do not force use_fast=False here: AutoProcessor forwards it to
+            # both image processing and tokenization. SigLIP2 would then use
+            # GemmaTokenizer (SentencePiece) instead of the cached fast tokenizer.
+            # Keep the same default loading behavior as the working V1 path.
         )
         self.model = AutoModel.from_pretrained(
             model_id,
@@ -103,7 +106,9 @@ class Siglip2Encoder:
 
     @property
     def fingerprint(self) -> str:
-        return f"{self.model_id}|{self.dtype_name}|{self.resolved_revision}|slow-processor-v1"
+        image_type = type(self.processor.image_processor).__name__
+        tokenizer_type = type(self.processor.tokenizer).__name__
+        return f"{self.model_id}|{self.dtype_name}|{self.resolved_revision}|{image_type}|{tokenizer_type}"
 
     def _to_device(self, inputs: dict[str, Any]) -> dict[str, Any]:
         return {key: value.to(self.device) for key, value in inputs.items()}
