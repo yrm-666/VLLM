@@ -81,6 +81,7 @@ class QueryAwareSelectionPipeline:
         timestamps: Sequence[float],
         frame_indices: Sequence[int],
         cache_namespace: str | None = None,
+        time_range: tuple[float, float] | None = None,
     ) -> PipelineResult:
         query = query.strip()
         if not query:
@@ -112,6 +113,7 @@ class QueryAwareSelectionPipeline:
             image_embeddings,
             timestamps=timestamps,
             candidate_indices=frame_indices,
+            time_range=time_range,
         )
         selected_frames = tuple(frames[position] for position in selection.selected_positions)
         selection_seconds = perf_counter() - selection_start
@@ -130,4 +132,3 @@ class QueryAwareSelectionPipeline:
                 total_seconds=perf_counter() - total_start,
             ),
         )
-

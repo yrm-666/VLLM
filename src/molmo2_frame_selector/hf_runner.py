@@ -16,6 +16,7 @@ class GenerationResult:
     ttft_seconds: float | None
     generation_seconds: float
     peak_vram_gb: float | None
+    output_tokens: int | None = None
 
 
 class Molmo2HFRunner:
@@ -35,6 +36,7 @@ class Molmo2HFRunner:
         dtype: str = "bfloat16",
         attention_backend: str = "sdpa",
         local_files_only: bool = False,
+        revision: str = "main",
     ) -> None:
         try:
             import numpy as np
@@ -56,6 +58,7 @@ class Molmo2HFRunner:
             trust_remote_code=True,
             padding_side="left",
             local_files_only=local_files_only,
+            revision=revision,
         )
         self.model = AutoModelForImageTextToText.from_pretrained(
             model_id,
@@ -64,8 +67,10 @@ class Molmo2HFRunner:
             device_map=device_map,
             attn_implementation=attention_backend,
             local_files_only=local_files_only,
+            revision=revision,
         )
         self.model.eval()
+        self.resolved_revision = getattr(self.model.config, "_commit_hash", None) or revision
 
     @property
     def device(self) -> Any:
@@ -74,6 +79,11 @@ class Molmo2HFRunner:
     def _synchronize(self) -> None:
         if self._torch.cuda.is_available():
             self._torch.cuda.synchronize()
+
+    def release_unused_memory(self) -> None:
+        """Release allocator leftovers after an unsuccessful example."""
+        if self._torch.cuda.is_available():
+            self._torch.cuda.empty_cache()
 
     def _move_inputs(self, inputs: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -175,4 +185,5 @@ class Molmo2HFRunner:
             ttft_seconds=ttft_seconds,
             generation_seconds=generation_seconds,
             peak_vram_gb=peak_vram_gb,
+            output_tokens=int(generated_tokens.shape[-1]),
         )

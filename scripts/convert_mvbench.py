@@ -16,6 +16,7 @@ def main() -> int:
     parser.add_argument("--task", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--allow-missing-videos", action="store_true")
     parser.add_argument("--append", action="store_true")
     args = parser.parse_args()
@@ -26,6 +27,7 @@ def main() -> int:
         task=args.task,
         limit=args.limit,
         require_videos=not args.allow_missing_videos,
+        offset=args.offset,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     mode = "a" if args.append else "w"
@@ -38,4 +40,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

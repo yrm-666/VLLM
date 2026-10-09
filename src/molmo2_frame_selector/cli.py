@@ -50,6 +50,7 @@ def run(input_payload: dict[str, Any], config_payload: dict[str, Any] | None) ->
         input_payload["frame_embeddings"],
         timestamps=input_payload.get("timestamps"),
         candidate_indices=input_payload.get("candidate_indices"),
+        time_range=input_payload.get("time_range"),
     )
     return {
         "query": input_payload.get("query"),
@@ -86,4 +87,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

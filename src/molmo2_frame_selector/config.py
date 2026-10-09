@@ -20,6 +20,8 @@ class SelectorConfig:
     diversity_weight: float = 0.25
     coverage_weight: float = 0.15
     epsilon: float = 1e-8
+    # Zero keeps V1; V2 reserves one frame per nonempty temporal bin.
+    temporal_bins: int = 0
 
     def __post_init__(self) -> None:
         if self.num_selected <= 0:
@@ -40,6 +42,8 @@ class SelectorConfig:
             raise ValueError("at least one selector weight must be positive")
         if self.epsilon <= 0:
             raise ValueError("epsilon must be positive")
+        if not isinstance(self.temporal_bins, int) or self.temporal_bins < 0:
+            raise ValueError("temporal_bins must be a non-negative integer")
 
     @property
     def normalized_weights(self) -> tuple[float, float, float]:
@@ -53,4 +57,3 @@ class SelectorConfig:
             self.diversity_weight / total,
             self.coverage_weight / total,
         )
-

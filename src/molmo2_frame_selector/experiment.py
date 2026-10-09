@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+from math import isfinite
 
 from .baselines import SELECTOR_MODES, selector_config_for_mode
 from .cache import SQLiteEmbeddingCache, cache_namespace, video_file_identity
@@ -14,6 +15,7 @@ from .metrics import ExperimentRecord, estimate_visual_tokens, parse_choice_labe
 from .pipeline import QueryAwareSelectionPipeline
 from .query import build_query_text
 from .selector import QueryAwareFrameSelector
+from .temporal import temporal_coverage, temporal_bin_ids
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +26,15 @@ class VideoQAExample:
     options: tuple[str, ...] = ()
     gold_label: str | None = None
     task: str = "unknown"
+    start_seconds: float | None = None
+    end_seconds: float | None = None
+
+    def __post_init__(self) -> None:
+        bounds = [bound for bound in (self.start_seconds, self.end_seconds) if bound is not None]
+        if any(not isfinite(bound) or bound < 0 for bound in bounds):
+            raise ValueError("temporal bounds must be finite and non-negative")
+        if self.end_seconds is not None and self.end_seconds <= (self.start_seconds or 0.0):
+            raise ValueError("end_seconds must be greater than start_seconds")
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +70,7 @@ def _gold_label(answer: Any, options: tuple[str, ...]) -> str | None:
 def load_jsonl_manifest(path: str | Path) -> list[VideoQAExample]:
     manifest_path = Path(path).expanduser().resolve(strict=True)
     examples: list[VideoQAExample] = []
+    seen_ids: set[str] = set()
     with manifest_path.open("r", encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, start=1):
             if not line.strip():
@@ -69,16 +81,20 @@ def load_jsonl_manifest(path: str | Path) -> list[VideoQAExample]:
                 video_path = Path(payload["video"])
                 if not video_path.is_absolute():
                     video_path = manifest_path.parent / video_path
-                examples.append(
-                    VideoQAExample(
+                example = VideoQAExample(
                         example_id=str(payload.get("id", line_number)),
                         video_path=video_path,
                         question=str(payload["question"]),
                         options=options,
                         gold_label=_gold_label(payload.get("answer"), options),
                         task=str(payload.get("task", "unknown")),
+                        start_seconds=(float(payload["start_seconds"]) if payload.get("start_seconds") is not None else None),
+                        end_seconds=(float(payload["end_seconds"]) if payload.get("end_seconds") is not None else None),
                     )
-                )
+                if example.example_id in seen_ids:
+                    raise ValueError(f"duplicate example ID: {example.example_id}")
+                seen_ids.add(example.example_id)
+                examples.append(example)
             except (KeyError, TypeError, ValueError) as error:
                 raise ValueError(
                     f"invalid manifest record at line {line_number}: {error}"
@@ -130,19 +146,25 @@ class VideoQAExperiment:
         cache_hits = 0
         cache_misses = 0
 
+        budget = (
+            self.official_max_frames if self.mode == "official_original" else
+            self.num_selected if self.mode == "uniform" else self.num_candidates
+        )
+        bounds = {}
+        if example.start_seconds is not None or example.end_seconds is not None:
+            bounds = {"start_seconds": example.start_seconds, "end_seconds": example.end_seconds}
         decode_start = perf_counter()
+        decoded = self.decoder.decode(example.video_path, budget, **bounds)
+        decode_seconds = perf_counter() - decode_start
         if self.mode == "official_original":
-            decoded = self.decoder.decode(example.video_path, self.official_max_frames)
             selected_frames = tuple(decoded.frames)
             selected_indices = decoded.frame_indices
             candidate_count = len(decoded.frame_indices)
         elif self.mode == "uniform":
-            decoded = self.decoder.decode(example.video_path, self.num_selected)
             selected_frames = tuple(decoded.frames)
             selected_indices = decoded.frame_indices
             candidate_count = len(decoded.frame_indices)
         elif self.mode in SELECTOR_MODES:
-            decoded = self.decoder.decode(example.video_path, self.num_candidates)
             config = selector_config_for_mode(
                 self.mode,
                 num_selected=self.num_selected,
@@ -165,6 +187,7 @@ class VideoQAExperiment:
                 timestamps=decoded.timestamps,
                 frame_indices=decoded.frame_indices,
                 cache_namespace=namespace,
+                time_range=decoded.time_range,
             )
             selected_frames = selection.selected_frames
             selected_indices = selection.selection.selected_indices
@@ -177,8 +200,10 @@ class VideoQAExperiment:
             cache_misses = selection.cache_misses
         else:
             raise ValueError(f"unknown experiment mode: {self.mode}")
-        decode_and_selection_seconds = perf_counter() - decode_start
-        decode_seconds = max(0.0, decode_and_selection_seconds - selector_seconds)
+        time_by_index = dict(zip(decoded.frame_indices, decoded.timestamps))
+        selected_times = tuple(time_by_index[index] for index in selected_indices)
+        time_span, bins_covered = temporal_coverage(selected_times, decoded.time_range)
+        bins_available = len(set(temporal_bin_ids(decoded.timestamps, 4, decoded.time_range)))
 
         generated = self.molmo_runner.generate(
             query,
@@ -220,9 +245,32 @@ class VideoQAExperiment:
             peak_vram_gb=generated.peak_vram_gb,
             cache_hits=cache_hits,
             cache_misses=cache_misses,
+            output_tokens=generated.output_tokens,
+            selected_time_span_fraction=time_span,
+            temporal_bins_covered=bins_covered,
+            temporal_bins_available=bins_available,
         )
         return ExperimentOutcome(
             record=record,
             query=query,
             selected_indices=tuple(selected_indices),
         )
+
+    def run_safely(self, example: VideoQAExample) -> ExperimentOutcome:
+        """Keep failed QA attempts in the accuracy denominator and error log."""
+        start = perf_counter()
+        try:
+            return self.run(example)
+        except Exception as error:
+            return ExperimentOutcome(
+                record=ExperimentRecord(
+                    example_id=example.example_id, task=example.task, mode=self.mode,
+                    prediction="", predicted_label=None, gold_label=example.gold_label,
+                    correct=False if example.gold_label is not None else None,
+                    candidate_frames=0, selected_frames=0, estimated_visual_tokens=0,
+                    status="error", error_type=type(error).__name__, error_message=str(error),
+                    end_to_end_seconds=perf_counter() - start,
+                ),
+                query=build_query_text(example.question, example.options or None),
+                selected_indices=(),
+            )

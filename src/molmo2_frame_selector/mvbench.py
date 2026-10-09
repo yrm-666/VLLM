@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from math import isfinite
 
 
 def convert_mvbench_annotations(
@@ -14,6 +15,7 @@ def convert_mvbench_annotations(
     task: str,
     limit: int | None = None,
     require_videos: bool = True,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     annotation_path = Path(annotation_path).expanduser().resolve(strict=True)
     video_root = Path(video_root).expanduser().resolve(strict=require_videos)
@@ -22,9 +24,12 @@ def convert_mvbench_annotations(
         raise ValueError("MVBench annotation JSON must contain a list")
     if limit is not None and limit < 0:
         raise ValueError("limit must be non-negative")
+    if offset < 0:
+        raise ValueError("offset must be non-negative")
 
     output = []
-    for index, item in enumerate(payload[:limit] if limit is not None else payload):
+    stop = None if limit is None else offset + limit
+    for index, item in enumerate(payload[offset:stop], start=offset):
         try:
             video_path = (video_root / item["video"]).resolve()
             if require_videos and not video_path.is_file():
@@ -33,8 +38,7 @@ def convert_mvbench_annotations(
             answer = str(item["answer"])
             if answer not in options:
                 raise ValueError("answer is not present in candidates")
-            output.append(
-                {
+            record = {
                     "id": f"{task}-{index:04d}",
                     "video": str(video_path),
                     "question": str(item["question"]),
@@ -42,8 +46,14 @@ def convert_mvbench_annotations(
                     "answer": chr(ord("A") + options.index(answer)),
                     "task": task,
                 }
-            )
+            if "start" in item or "end" in item:
+                if item.get("start") is None or item.get("end") is None:
+                    raise ValueError("interval annotations must provide both start and end")
+                start, end = float(item["start"]), float(item["end"])
+                if not isfinite(start) or not isfinite(end) or start < 0 or end <= start:
+                    raise ValueError("invalid start/end interval")
+                record.update(start_seconds=start, end_seconds=end)
+            output.append(record)
         except (KeyError, TypeError, ValueError, FileNotFoundError) as error:
             raise ValueError(f"invalid MVBench item {index}: {error}") from error
     return output
-

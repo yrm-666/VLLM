@@ -9,6 +9,7 @@ SELECTOR_MODES = (
     "relevance_only",
     "relevance_diversity",
     "query_aware",
+    "query_aware_v2",
 )
 ALL_MODES = ("official_original", "uniform", *SELECTOR_MODES)
 
@@ -23,7 +24,7 @@ def selector_config_for_mode(
         weights = (1.0, 0.0, 0.0)
     elif mode == "relevance_diversity":
         weights = (0.60, 0.25, 0.0)
-    elif mode == "query_aware":
+    elif mode in {"query_aware", "query_aware_v2"}:
         weights = (0.60, 0.25, 0.15)
     else:
         raise ValueError(f"mode does not use a query-aware selector: {mode}")
@@ -33,5 +34,5 @@ def selector_config_for_mode(
         relevance_weight=weights[0],
         diversity_weight=weights[1],
         coverage_weight=weights[2],
+        temporal_bins=4 if mode == "query_aware_v2" else 0,
     )
-

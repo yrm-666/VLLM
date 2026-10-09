@@ -1,5 +1,7 @@
 # 4090 / 4090D 上卡执行手册
 
+已有环境和首轮 pilot 的用户，请直接看 [V2 回归手册](V2_RUNBOOK.md)，无需重新安装。
+
 ## 推荐机器
 
 - 单卡 RTX 4090 或 RTX 4090D，24 GB；
@@ -75,7 +77,7 @@ MVBench 官方 JSON 可逐 task 转换；`--video-root` 指向该 task 对应的
 ```bash
 python scripts/convert_mvbench.py \
   --annotations /data/MVBench/json/action_sequence.json \
-  --video-root /data/MVBench/video/sta \
+  --video-root /data/MVBench/video/star/Charades_v1_480 \
   --task action_sequence \
   --output manifests/mvbench-pilot.jsonl \
   --limit 20

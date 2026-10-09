@@ -15,9 +15,12 @@ def _numeric(records: list[dict[str, Any]], key: str) -> list[float]:
 
 def _summarize_group(records: list[dict[str, Any]]) -> dict[str, Any]:
     scored = [record for record in records if record.get("correct") is not None]
+    successful = [record for record in records if record.get("status", "ok") == "ok"]
     output: dict[str, Any] = {
         "examples": len(records),
         "scored_examples": len(scored),
+        "successful_examples": len(successful),
+        "failed_examples": len(records) - len(successful),
         "accuracy": (
             sum(bool(record["correct"]) for record in scored) / len(scored)
             if scored
@@ -30,6 +33,12 @@ def _summarize_group(records: list[dict[str, Any]]) -> dict[str, Any]:
         "estimated_visual_tokens",
         "actual_visual_tokens",
         "input_tokens",
+        "output_tokens",
+        "selected_time_span_fraction",
+        "temporal_bins_covered",
+        "temporal_bins_available",
+        "cache_hits",
+        "cache_misses",
         "decode_seconds",
         "selector_seconds",
         "text_encoding_seconds",
@@ -42,7 +51,7 @@ def _summarize_group(records: list[dict[str, Any]]) -> dict[str, Any]:
         "end_to_end_seconds",
         "peak_vram_gb",
     ):
-        values = _numeric(records, key)
+        values = _numeric(successful, key)
         output[f"mean_{key}"] = mean(values) if values else None
         output[f"median_{key}"] = median(values) if values else None
     return output
@@ -92,6 +101,33 @@ def compare_jsonl_files(paths: list[str | Path], baseline_mode: str = "uniform")
                 by_mode[mode].append(record)
 
     summaries = {mode: _summarize_group(records) for mode, records in sorted(by_mode.items())}
+    if baseline_mode not in by_mode:
+        raise ValueError(f"baseline mode not found: {baseline_mode}")
+    baseline = {str(record["example_id"]): record for record in by_mode[baseline_mode]}
+    for mode, records in by_mode.items():
+        if {str(record["example_id"]) for record in records} != set(baseline):
+            raise ValueError(f"mode {mode} has a different sample set from baseline")
+        for record in records:
+            reference = baseline[str(record["example_id"])]
+            for key in ("query", "gold_label", "task", "model_id", "dtype", "max_fps",
+                        "max_new_tokens", "start_seconds", "end_seconds",
+                        "resolved_model_revision", "resolved_selector_revision",
+                        "attention_backend", "sampling_policy"):
+                if key == "resolved_selector_revision" and (
+                    record.get(key) is None or reference.get(key) is None
+                ):
+                    # Uniform has no selector checkpoint; compare selector
+                    # revisions below only among methods that use one.
+                    continue
+                if key in record and key in reference and record[key] != reference[key]:
+                    raise ValueError(f"paired comparison differs in {key}: {record['example_id']}")
+    selector_revisions = {
+        record["resolved_selector_revision"]
+        for records in by_mode.values() for record in records
+        if record.get("resolved_selector_revision") is not None
+    }
+    if len(selector_revisions) > 1:
+        raise ValueError("paired selector modes use different checkpoint revisions")
     baseline_accuracy = summaries.get(baseline_mode, {}).get("accuracy")
     for mode, summary in summaries.items():
         accuracy = summary.get("accuracy")

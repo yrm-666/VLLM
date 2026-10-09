@@ -61,6 +61,7 @@ class Siglip2Encoder:
         dtype: str = "auto",
         batch_size: int = 16,
         local_files_only: bool = False,
+        revision: str = "main",
     ) -> None:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
@@ -88,17 +89,21 @@ class Siglip2Encoder:
         self.processor = AutoProcessor.from_pretrained(
             model_id,
             local_files_only=local_files_only,
+            revision=revision,
+            use_fast=False,
         )
         self.model = AutoModel.from_pretrained(
             model_id,
             dtype=torch_dtype,
             local_files_only=local_files_only,
+            revision=revision,
         ).to(self.device)
         self.model.eval()
+        self.resolved_revision = getattr(self.model.config, "_commit_hash", None) or revision
 
     @property
     def fingerprint(self) -> str:
-        return f"{self.model_id}|{self.dtype_name}"
+        return f"{self.model_id}|{self.dtype_name}|{self.resolved_revision}|slow-processor-v1"
 
     def _to_device(self, inputs: dict[str, Any]) -> dict[str, Any]:
         return {key: value.to(self.device) for key, value in inputs.items()}
@@ -133,4 +138,3 @@ class Siglip2Encoder:
                 features = self.model.get_image_features(**self._to_device(inputs))
             output.extend(self._as_normalized_lists(features))
         return output
-

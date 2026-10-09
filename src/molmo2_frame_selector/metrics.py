@@ -75,6 +75,13 @@ class ExperimentRecord:
     peak_vram_gb: float | None = None
     cache_hits: int = 0
     cache_misses: int = 0
+    status: str = "ok"
+    error_type: str | None = None
+    error_message: str | None = None
+    output_tokens: int | None = None
+    selected_time_span_fraction: float | None = None
+    temporal_bins_covered: int | None = None
+    temporal_bins_available: int | None = None
 
 
 class JsonlWriter:

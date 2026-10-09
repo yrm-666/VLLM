@@ -4,6 +4,11 @@
 
 当前阶段只做时间维帧选择。暂不做 SFT、RL、空间 token 剪枝或模型微调。
 
+2026-10-09：4090D 已跑通真实推理与 MVBench scene-transition 20 题开发 pilot。
+Uniform-8 达到 18/20；当前结果未证明 query-aware 优于均匀采样。
+新增 `query_aware_v2` 时间分区覆盖约束，尚待远程 GPU 验证；运行步骤见
+[V2 回归与独立验证手册](docs/V2_RUNBOOK.md)。不修改旧结果，也不重选项目方向。
+
 ## 已完成的本地阶段
 
 本地先完成可独立验证的算法核心：
@@ -35,7 +40,7 @@ tests/             # 纯标准库单元测试
 
 核心算法测试不需要 GPU、PyTorch 或模型权重；生产入口会在服务器上按需加载 SigLIP2 和 Molmo2。当前已经完成：
 
-- 与官方 `uniform_last_frame` 语义一致的候选索引；
+- 官方式 `uniform_last_frame` 候选索引（保留 round 规则，尚未严格对齐 native evaluator）；
 - 冻结 SigLIP2 双编码器适配器；
 - relevance/diversity/coverage 贪心选择；
 - 原始帧索引和时间戳保留；
@@ -71,6 +76,7 @@ python -m molmo2_frame_selector `
 - [4090/4090D 执行手册](docs/GPU_RUNBOOK.md)
 - [第一阶段实验协议](docs/EXPERIMENT_PROTOCOL.md)
 - [当前完成度与 GPU 边界](docs/STATUS.md)
+- [V2 回归与独立验证](docs/V2_RUNBOOK.md)
 
 ## 迁移原则
 

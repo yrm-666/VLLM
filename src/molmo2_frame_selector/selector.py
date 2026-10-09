@@ -7,6 +7,7 @@ from math import isfinite, sqrt
 from typing import Iterable, Sequence
 
 from .config import SelectorConfig
+from .temporal import temporal_bin_ids
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +99,7 @@ class QueryAwareFrameSelector:
         *,
         timestamps: Sequence[float] | None = None,
         candidate_indices: Sequence[int] | None = None,
+        time_range: tuple[float, float] | None = None,
     ) -> SelectionResult:
         relevance_raw = _as_finite_floats(relevance_scores, "relevance_scores")
         count = len(relevance_raw)
@@ -146,6 +148,17 @@ class QueryAwareFrameSelector:
         selected: list[int] = []
         steps: list[SelectionStep] = []
         target_count = min(self.config.num_selected, count)
+        selected_set: set[int] = set()
+        # Incremental minima give the exact V1 scores without repeatedly
+        # comparing each candidate with every previously selected frame.
+        nearest_visual = [float("inf")] * count
+        nearest_time = [float("inf")] * count
+        bin_count = min(self.config.temporal_bins, target_count)
+        if bin_count:
+            temporal_bins = temporal_bin_ids(time_values, bin_count, time_range)
+        else:
+            temporal_bins = (0,) * count
+        uncovered_bins = set(temporal_bins) if bin_count else set()
 
         for rank in range(target_count):
             best_position = -1
@@ -153,22 +166,17 @@ class QueryAwareFrameSelector:
             best_components = (0.0, 0.0, 0.0)
 
             for position in range(count):
-                if position in selected:
+                if position in selected_set:
+                    continue
+                # Until all nonempty bins are covered, only an uncovered bin
+                # may receive a frame. Remaining slots use the unchanged score.
+                if uncovered_bins and temporal_bins[position] not in uncovered_bins:
                     continue
 
                 relevance_component = relevance[position]
                 if selected:
-                    diversity_component = min(
-                        _cosine_distance(embeddings[position], embeddings[chosen])
-                        for chosen in selected
-                    )
-                    if duration <= self.config.epsilon:
-                        coverage_component = 0.0
-                    else:
-                        coverage_component = min(
-                            abs(time_values[position] - time_values[chosen]) / duration
-                            for chosen in selected
-                        )
+                    diversity_component = nearest_visual[position]
+                    coverage_component = nearest_time[position]
                 else:
                     diversity_component = 0.0
                     coverage_component = 0.0
@@ -190,6 +198,8 @@ class QueryAwareFrameSelector:
                     )
 
             selected.append(best_position)
+            selected_set.add(best_position)
+            uncovered_bins.discard(temporal_bins[best_position])
             assert best_key is not None
             steps.append(
                 SelectionStep(
@@ -203,6 +213,19 @@ class QueryAwareFrameSelector:
                     coverage_score=best_components[2],
                 )
             )
+            if rank + 1 < target_count:
+                for position in range(count):
+                    if position in selected_set:
+                        continue
+                    nearest_visual[position] = min(
+                        nearest_visual[position],
+                        _cosine_distance(embeddings[position], embeddings[best_position]),
+                    )
+                    time_distance = (
+                        abs(time_values[position] - time_values[best_position]) / duration
+                        if duration > self.config.epsilon else 0.0
+                    )
+                    nearest_time[position] = min(nearest_time[position], time_distance)
 
         chronological = sorted(
             selected,
@@ -216,4 +239,3 @@ class QueryAwareFrameSelector:
             selected_indices=tuple(frame_indices[position] for position in chronological),
             selected_timestamps=tuple(time_values[position] for position in chronological),
         )
-
