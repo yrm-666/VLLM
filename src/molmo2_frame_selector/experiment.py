@@ -137,6 +137,8 @@ class VideoQAExperiment:
         self.measure_ttft = measure_ttft
 
     def run(self, example: VideoQAExample) -> ExperimentOutcome:
+        if self.mode == "text_only":
+            return self._run_text_only(example)
         total_start = perf_counter()
         query = build_query_text(example.question, example.options or None)
         selector_seconds = 0.0
@@ -255,6 +257,28 @@ class VideoQAExperiment:
             query=query,
             selected_indices=tuple(selected_indices),
         )
+
+    def _run_text_only(self, example: VideoQAExample) -> ExperimentOutcome:
+        start = perf_counter()
+        query = build_query_text(example.question, example.options or None)
+        generated = self.molmo_runner.generate_text(
+            query, max_new_tokens=self.max_new_tokens, measure_ttft=self.measure_ttft)
+        if generated.visual_tokens != 0:
+            raise ValueError("text_only unexpectedly produced visual tokens")
+        labels = [chr(ord("A") + index) for index in range(len(example.options))]
+        predicted = parse_choice_label(generated.text, labels) if labels else None
+        return ExperimentOutcome(
+            record=ExperimentRecord(
+                example_id=example.example_id, task=example.task, mode=self.mode,
+                prediction=generated.text, predicted_label=predicted, gold_label=example.gold_label,
+                correct=predicted == example.gold_label if example.gold_label is not None else None,
+                candidate_frames=0, selected_frames=0, estimated_visual_tokens=0,
+                actual_visual_tokens=0, input_tokens=generated.input_tokens,
+                decode_seconds=0.0, selector_seconds=0.0,
+                processor_seconds=generated.processor_seconds, ttft_seconds=generated.ttft_seconds,
+                generation_seconds=generated.generation_seconds, peak_vram_gb=generated.peak_vram_gb,
+                output_tokens=generated.output_tokens, end_to_end_seconds=perf_counter() - start),
+            query=query, selected_indices=())
 
     def run_safely(self, example: VideoQAExample) -> ExperimentOutcome:
         """Keep failed QA attempts in the accuracy denominator and error log."""

@@ -4,6 +4,9 @@
 
 当前阶段只做时间维帧选择。暂不做 SFT、RL、空间 token 剪枝或模型微调。
 
+第一轮已完成开发/独立视频验证，V2 覆盖约束有效但未证明整体超过 Uniform。
+参见 [结果记录](docs/ROUND1_RESULTS.md) 和 [第二轮执行手册](docs/ROUND2_RUNBOOK.md)。
+
 2026-10-09：4090D 已跑通真实推理与 MVBench scene-transition 20 题开发 pilot。
 Uniform-8 达到 18/20；当前结果未证明 query-aware 优于均匀采样。
 新增 `query_aware_v2` 时间分区覆盖约束，尚待远程 GPU 验证；运行步骤见

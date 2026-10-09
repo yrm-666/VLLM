@@ -84,6 +84,7 @@ def compare_jsonl_files(paths: list[str | Path], baseline_mode: str = "uniform")
     by_mode: dict[str, list[dict[str, Any]]] = defaultdict(list)
     seen: set[tuple[str, str]] = set()
     for path in paths:
+        before = len(seen)
         with Path(path).open("r", encoding="utf-8") as stream:
             for line_number, line in enumerate(stream, start=1):
                 if not line.strip():
@@ -99,6 +100,8 @@ def compare_jsonl_files(paths: list[str | Path], baseline_mode: str = "uniform")
                     )
                 seen.add(identity)
                 by_mode[mode].append(record)
+        if len(seen) == before:
+            raise ValueError(f"result file contains no records: {path}")
 
     summaries = {mode: _summarize_group(records) for mode, records in sorted(by_mode.items())}
     if baseline_mode not in by_mode:

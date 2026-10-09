@@ -11,7 +11,7 @@ SELECTOR_MODES = (
     "query_aware",
     "query_aware_v2",
 )
-ALL_MODES = ("official_original", "uniform", *SELECTOR_MODES)
+ALL_MODES = ("official_original", "uniform", "text_only", *SELECTOR_MODES)
 
 
 def selector_config_for_mode(

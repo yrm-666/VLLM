@@ -135,6 +135,23 @@ class Molmo2HFRunner:
             return_tensors="pt",
         )
         processor_seconds = perf_counter() - processor_start
+        return self._generate_inputs(inputs, processor_seconds, max_new_tokens, measure_ttft)
+
+    def generate_text(
+        self, query: str, *, max_new_tokens: int = 128, measure_ttft: bool = False,
+    ) -> GenerationResult:
+        """Same question/options, genuinely no image/video or dummy frame."""
+        if max_new_tokens <= 0:
+            raise ValueError("max_new_tokens must be positive")
+        messages = [{"role": "user", "content": [{"type": "text", "text": query}]}]
+        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        start = perf_counter()
+        inputs = self.processor(text=text, padding=True, return_tensors="pt")
+        return self._generate_inputs(inputs, perf_counter() - start, max_new_tokens, measure_ttft)
+
+    def _generate_inputs(
+        self, inputs: Any, processor_seconds: float, max_new_tokens: int, measure_ttft: bool,
+    ) -> GenerationResult:
         inputs = self._move_inputs(dict(inputs))
         input_tokens = int(inputs["input_ids"].shape[-1])
         grid = inputs.get("video_grids")
