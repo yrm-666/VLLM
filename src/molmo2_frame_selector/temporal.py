@@ -37,5 +37,5 @@ def temporal_coverage(
 ) -> tuple[float, int]:
     ids = temporal_bin_ids(timestamps, bins, time_range)
     width = time_range[1] - time_range[0]
-    span = (max(timestamps) - min(timestamps)) / width if timestamps and width > 0 else 0.0
+    span = (max(timestamps) - min(timestamps)) / width if len(timestamps) > 0 and width > 0 else 0.0
     return min(1.0, max(0.0, span)), len(set(ids))

@@ -133,7 +133,9 @@ class Siglip2Encoder:
         return self._as_normalized_lists(features)
 
     def encode_images(self, images: Sequence[Any]) -> list[list[float]]:
-        if not images:
+        # Decord returns an ndarray in the no-cache path; bool(ndarray) is
+        # ambiguous. The cached path used a list and hid this latent bug.
+        if len(images) == 0:
             return []
         output: list[list[float]] = []
         for start in range(0, len(images), self.batch_size):

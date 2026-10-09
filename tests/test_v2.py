@@ -18,6 +18,7 @@ from molmo2_frame_selector.selector import (
 )
 from molmo2_frame_selector.temporal import temporal_bin_ids, temporal_coverage
 from molmo2_frame_selector.video import bounded_frame_range
+from test_encoders import AmbiguousArray
 
 
 def naive_v1(scores, rows, times, config):
@@ -98,6 +99,9 @@ class V2SelectorTest(unittest.TestCase):
 
 
 class TemporalSafetyTest(unittest.TestCase):
+    def test_temporal_coverage_accepts_ndarray_style_times(self):
+        self.assertEqual(temporal_coverage(AmbiguousArray([0.0, 3.0]), (0.0, 4.0)), (0.75, 2))
+
     def test_half_open_bounds_preserve_original_frame_positions(self):
         self.assertEqual(bounded_frame_range((0, 1, 2, 3, 4), 5, 1, 4), (1, 4, (1, 4)))
         self.assertEqual(bounded_frame_range((0, 1, 2), 3, 1, 10), (1, 3, (1, 3)))
