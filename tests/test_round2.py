@@ -102,6 +102,28 @@ class Round2Test(unittest.TestCase):
             with self.assertRaises(ValueError):
                 module.choose_indices([row], 1)
 
+    def test_segment_resolution_matches_bounds_not_just_video_name(self):
+        module = self.action_module()
+        row = {"video": "ZS9XR.mp4", "start": 1.5, "end": 17.1}
+        correct = "star/Charades_segment/ZS9XR_1.5_17.1.mp4"
+        wrong = "star/Charades_segment/ZS9XR_19.3_36.3.mp4"
+        self.assertEqual(module.resolve_segment(row, [wrong, correct]), correct)
+        with self.assertRaises(ValueError):
+            module.resolve_segment(row, [wrong])
+        with self.assertRaises(ValueError):
+            module.resolve_segment(row, [correct, correct])
+
+    def test_segment_manifest_preserves_source_bounds_without_double_crop(self):
+        module = self.action_module()
+        row = {"id": "x", "video": "ZS9XR.mp4", "start_seconds": 1.5, "end_seconds": 17.1}
+        result = module.segment_record(row, "star/Charades_segment/ZS9XR_1.5_17.1.mp4", Path("videos"))
+        self.assertNotIn("start_seconds", result)
+        self.assertNotIn("end_seconds", result)
+        self.assertEqual(result["source_start_seconds"], 1.5)
+        self.assertAlmostEqual(result["expected_duration_seconds"], 15.6)
+        self.assertEqual(result["asset_layout"], "pretrimmed_segment")
+        self.assertIn("start_seconds", row)
+
     def test_batch_text_only_does_not_load_selector(self):
         # Same production batch CLI, not a separate unpaired evaluation script.
         from test_manifest_runner import load_runner, FakeRunner

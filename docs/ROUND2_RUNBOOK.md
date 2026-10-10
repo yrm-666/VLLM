@@ -46,6 +46,15 @@ CPU 测试验证了没有视觉输入的调用边界；真实 remote-code text-o
 本项目保留原始视频帧编号，选取 `[start,end)` 内的帧起始时间；与 native 的
 round 边界/分段采样不是严格相同，因此本轮是统一模型下的内部配对评测。
 
+HF 的 video 分支实际存放 `star/Charades_segment/<video>_<start>_<end>.mp4`，
+不是上述 native 本地目录。下载器查询固定 revision 的真实文件列表，按源视频 ID 和
+数值起止时间唯一匹配；缺失/歧义直接报错，不换题。匹配片段已经裁剪，因此 manifest
+只保存 source_start/source_end 用于来源记录，不传 start_seconds/end_seconds 再裁剪。
+输入时间戳/帧编号相对于片段。预检查核对片段时长（容差 max(0.25秒,2帧)）。
+不宣称片段编码/裁剪与 native 原视频路径逐位等价。
+
+[HF 视频目录](https://huggingface.co/datasets/OpenGVLab/MVBench/tree/video/star)
+
 ```bash
 HF_HUB_OFFLINE=0 HF_ENDPOINT=https://huggingface.co \
 python scripts/prepare_action_validation.py \
